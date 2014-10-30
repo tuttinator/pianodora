@@ -1,9 +1,18 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"log"
+	"net"
 	"os"
 )
+
+type Event struct {
+	Name    string `json:"name"`
+	Details string `json:"details"`
+}
 
 func check(e error) {
 	if e != nil {
@@ -12,10 +21,18 @@ func check(e error) {
 }
 
 func main() {
-	eventDetails := extractStdin(os.Stdin)
-	fmt.Printf(eventDetails)
-	eventName := extractArgs(os.Args)
-	fmt.Println(eventName)
+	e := &Event{Name: extractArgs(os.Args), Details: extractStdin(os.Stdin)}
+	payload, err := json.Marshal(e)
+	check(err)
+
+	conn, err := net.Dial("tcp", "localhost:9123")
+	check(err)
+	log.Printf(string(payload))
+
+	fmt.Fprintf(conn, "%v\n", string(payload))
+	status, err := bufio.NewReader(conn).ReadString('\n')
+	check(err)
+	log.Println(status)
 }
 
 func extractStdin(file *os.File) string {
