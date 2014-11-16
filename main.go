@@ -1,13 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net"
+	"strings"
 )
 
-type Event struct {
-	Name    string `json:"name"`
-	Details string `json:"details"`
+type PandoraMessage struct {
+	Title    string
+	Artist   string
+	Album    string
+	CoverArt string
+}
+
+type PianobarEvent struct {
+	Name    string
+	Details string
 }
 
 func check(e error) {
@@ -21,7 +30,6 @@ func main() {
 	check(err)
 
 	msgchan := make(chan string)
-	go publishMessages(msgchan)
 
 	for {
 		conn, err := ln.Accept()
@@ -40,7 +48,14 @@ func handleConnection(c net.Conn, msgchan chan<- string) {
 			c.Close()
 			break
 		}
-		msgchan <- string(buf[0:n])
+		s := string(buf[0:n])
+
+		if strings.HasSuffix(s, "\n") {
+			go publish(s)
+			c.Close()
+		}
+
+		msgchan <- s
 	}
 	log.Printf("Connection from %v closed.", c.RemoteAddr())
 
@@ -48,8 +63,31 @@ func handleConnection(c net.Conn, msgchan chan<- string) {
 	c.Close()
 }
 
-func publishMessages(msgchan <-chan string) {
-	for msg := range msgchan {
-		log.Printf("new message: %s", msg)
+func publish(s string) PandoraMessage {
+	message := parse(s)
+	log.Println(message)
+	return message
+}
+
+func parse(s string) PandoraMessage {
+	var event PianobarEvent
+	err := json.Unmarshal([]byte(s), &event)
+	check(err)
+
+	var message PandoraMessage
+	lines := strings.Split(event.Details, "\n")
+	for _, line := range lines {
+		items := strings.Split(line, "=")
+		switch items[0] {
+		case "artist":
+			message.Artist = items[1]
+		case "album":
+			message.Album = items[1]
+		case "coverArt":
+			message.CoverArt = items[1]
+		case "title":
+			message.Title = items[1]
+		}
 	}
+	return message
 }
